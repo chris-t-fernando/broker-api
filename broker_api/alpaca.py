@@ -1,4 +1,4 @@
-from ibroker_api import (
+from .ibroker_api import (
     ITradeAPI,
     IOrderResult,
     Account,

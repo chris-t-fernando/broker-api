@@ -1,6 +1,6 @@
 from binance import Client, ThreadedWebsocketManager, ThreadedDepthCacheManager
 
-from ibroker_api import (
+from .ibroker_api import (
     ITradeAPI,
     IOrderResult,
     Account,

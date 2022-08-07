@@ -9,7 +9,7 @@ import pytz
 import time
 
 
-from ibroker_api import (
+from .ibroker_api import (
     ITradeAPI,
     Asset,
     IOrderResult,
