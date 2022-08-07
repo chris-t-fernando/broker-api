@@ -2,7 +2,7 @@ from distutils.core import setup
 
 setup(
     name="broker_api",
-    version="0.21",
+    version="0.22",
     description="Interface for submitting and managing purchases across multiple crypto brokers",
     author="Chris Fernando",
     author_email="chris.t.fernando@gmail.com",
