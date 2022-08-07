@@ -1,4 +1,4 @@
-from itradeapi import (
+from ibroker_api import (
     ITradeAPI,
     IOrderResult,
     Account,
@@ -19,18 +19,7 @@ import utils
 # that i need to pipe them through?
 # or maybe make a script to update them?!
 
-log_wp = logging.getLogger(
-    "backtest_api"
-)  # or pass an explicit name here, e.g. "mylogger"
-hdlr = logging.StreamHandler()
-fhdlr = logging.FileHandler("backtest_api.log")
-formatter = logging.Formatter(
-    "%(asctime)s - %(name)s - %(levelname)s - %(funcName)20s - %(message)s"
-)
-hdlr.setFormatter(formatter)
-log_wp.addHandler(hdlr)
-log_wp.addHandler(fhdlr)
-log_wp.setLevel(logging.INFO)
+log = logging.getLogger(__name__)
 
 
 # CONSTANTS
@@ -418,7 +407,7 @@ class BackTestAPI(ITradeAPI):
                     or self._orders[symbol].status
                     in ORDER_STATUS_SUMMARY_TO_ID["filled"]
                 ):
-                    log_wp.debug(
+                    log.debug(
                         f"{symbol_to_delete}: Unable to delete order_id {order_id} from "
                         f"self._orders list since its already in {self._orders[symbol].status_summary} state"
                     )
@@ -439,7 +428,7 @@ class BackTestAPI(ITradeAPI):
             self._inactive_orders.append(self._orders[symbol_to_delete])
             del self._orders[symbol_to_delete]
 
-            log_wp.debug(
+            log.debug(
                 f"{symbol_to_delete}: Moved order_id {order_id} from self._orders to"
                 f"self._inactive_orders"
             )
@@ -447,7 +436,7 @@ class BackTestAPI(ITradeAPI):
                 order_id=order_id, back_testing_date=back_testing_date
             )
         else:
-            log_wp.warning(
+            log.warning(
                 f"Tried to remove order_id {order_id} from self._orders but did not "
                 f"find it - is it already closed?"
             )
@@ -484,7 +473,7 @@ class BackTestAPI(ITradeAPI):
             ):
                 self._inactive_orders.append(this_order)
                 filled_symbols.append(symbol)
-                log_wp.debug(
+                log.debug(
                     f"{symbol}: Skipping this symbol in _inactive_orders since the "
                     f"status is {ORDER_STATUS_ID_TO_SUMMARY[this_order.status]}"
                 )
@@ -493,13 +482,13 @@ class BackTestAPI(ITradeAPI):
             try:
                 check_index = self._bars[symbol].loc[back_testing_date]
             except KeyError as e:
-                log_wp.debug(f"{symbol}: No data for {back_testing_date}")
+                log.debug(f"{symbol}: No data for {back_testing_date}")
                 continue
 
             # if we got here, the order is not yet actioned
             if this_order.order_type == MARKET_BUY:
                 # immediate fill - its just a question of how many units they bought
-                log_wp.debug(
+                log.debug(
                     f"{symbol}: Starting fill for MARKET_BUY order {this_order.order_id}"
                 )
 
@@ -512,7 +501,7 @@ class BackTestAPI(ITradeAPI):
 
                 # don't process this order if it would send balance to negative
                 if order_value > self._balance:
-                    log_wp.warning(
+                    log.warning(
                         f"{symbol}: Unable to fill {this_order.order_id} - order value "
                         f"is {order_value} but balance is only {self._balance}"
                     )
@@ -551,13 +540,13 @@ class BackTestAPI(ITradeAPI):
 
                 filled_symbols.append(symbol)
 
-                log_wp.debug(
+                log.debug(
                     f"{symbol}: market_buy filled, {this_order.filled_unit_quantity} "
                     f"units at {this_order.filled_unit_price}, balance {self._balance}"
                 )
 
             elif this_order.order_type == MARKET_SELL:
-                log_wp.debug(
+                log.debug(
                     f"{symbol}: Starting fill for MARKET_SELL order {this_order.order_id}"
                 )
 
@@ -565,7 +554,7 @@ class BackTestAPI(ITradeAPI):
                 held, paid = self._get_held_units(symbol)
 
                 if held < this_order.ordered_unit_quantity:
-                    log_wp.warning(
+                    log.warning(
                         f"{symbol}: Failed to fill order {this_order.order_id} - trying to "
                         f"sell {this_order.ordered_unit_quantity} units but only hold {held}"
                     )
@@ -603,7 +592,7 @@ class BackTestAPI(ITradeAPI):
 
                 filled_symbols.append(symbol)
 
-                log_wp.info(
+                log.info(
                     f"{symbol}: market_sell filled, {this_order.filled_unit_quantity} "
                     f"units at {this_order.filled_unit_price}, balance {self._balance}"
                 )
@@ -613,7 +602,7 @@ class BackTestAPI(ITradeAPI):
                     self._bars[symbol].Low.loc[back_testing_date]
                     < this_order.ordered_unit_price
                 ):
-                    log_wp.debug(
+                    log.debug(
                         f"{symbol}: Starting fill for LIMIT_BUY order {this_order.order_id}"
                     )
 
@@ -622,7 +611,7 @@ class BackTestAPI(ITradeAPI):
                         this_order.ordered_unit_quantity * this_order.ordered_unit_price
                     )
                     if order_value > self._balance:
-                        log_wp.warning(
+                        log.warning(
                             f"{symbol}: Unable to fill {this_order.order_id} - order "
                             f"value is {order_value} but balance is only {self._balance}"
                         )
@@ -670,7 +659,7 @@ class BackTestAPI(ITradeAPI):
 
                     filled_symbols.append(symbol)
 
-                    log_wp.info(
+                    log.info(
                         f"{symbol}: limit_buy filled, {this_order.filled_unit_quantity} "
                         f"units at {this_order.filled_unit_price}, balance {self._balance}"
                     )
@@ -680,14 +669,14 @@ class BackTestAPI(ITradeAPI):
                     self._bars[symbol].High.loc[back_testing_date]
                     > this_order.ordered_unit_price
                 ):
-                    log_wp.debug(
+                    log.debug(
                         f"{symbol}: Starting fill for LIMIT_SELL order {this_order.order_id}"
                     )
                     # how many of this symbol do we own? is it >= than the requested amount to sell?
                     held, paid = self._get_held_units(symbol)
 
                     if held < this_order.ordered_unit_quantity:
-                        log_wp.debug(
+                        log.debug(
                             f"{symbol}: Failed to fill order {this_order.order_id} - "
                             f"trying to sell {this_order.ordered_unit_quantity} units "
                             f"but only hold {held}"
@@ -727,7 +716,7 @@ class BackTestAPI(ITradeAPI):
 
                     filled_symbols.append(symbol)
 
-                    log_wp.info(
+                    log.info(
                         f"{symbol}: limit_sell filled, {this_order.filled_unit_quantity} "
                         f"units at {this_order.filled_unit_price}, balance {self._balance}"
                     )

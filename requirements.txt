@@ -1,3 +1,8 @@
 alpaca_trade_api
 pandas
 python-dateutil
+pyswyft
+boto3
+bta-lib
+yfinance
+git+https://github.com/chris-t-fernando/parameter-store.git

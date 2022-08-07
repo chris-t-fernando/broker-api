@@ -1,7 +1,6 @@
 from binance import Client, ThreadedWebsocketManager, ThreadedDepthCacheManager
-import boto3
 
-from itradeapi import (
+from ibroker_api import (
     ITradeAPI,
     IOrderResult,
     Account,
@@ -11,7 +10,7 @@ from itradeapi import (
     UnknownSymbolError,
     DelistedAssetError,
     UntradeableAssetError,
-    BrokerAPIError
+    BrokerAPIError,
 )
 
 from datetime import datetime
@@ -22,16 +21,7 @@ import math
 from dateutil.relativedelta import relativedelta
 
 
-log_wp = logging.getLogger("binance")  # or pass an explicit name here, e.g. "mylogger"
-hdlr = logging.StreamHandler()
-fhdlr = logging.FileHandler("binance.log")
-formatter = logging.Formatter(
-    "%(asctime)s - %(name)s - %(levelname)s - %(funcName)20s - %(message)s"
-)
-hdlr.setFormatter(formatter)
-log_wp.addHandler(hdlr)
-log_wp.addHandler(fhdlr)
-log_wp.setLevel(logging.DEBUG)
+log = logging.getLogger(__name__)
 
 # CONSTANTS
 MARKET_BUY = 1
@@ -59,9 +49,7 @@ class OrderResult(IOrderResult):
         if response.type == "limit":
             self.ordered_unit_quantity = float(response.qty)
             self.ordered_unit_price = float(response.limit_price)
-            self.ordered_total_value = (
-                self.ordered_unit_quantity * self.ordered_unit_price
-            )
+            self.ordered_total_value = self.ordered_unit_quantity * self.ordered_unit_price
 
         else:
             # market orders - so there is only quantity is known, not price or total value
@@ -101,9 +89,10 @@ class OrderResult(IOrderResult):
 
         self.validate()
 
+
 # concrete implementation of trade api for binance
-#class BinanceAPI(ITradeAPI):
-class BinanceAPI():
+# class BinanceAPI(ITradeAPI):
+class BinanceAPI:
     supported_crypto_symbols_bin = []
 
     def __init__(
@@ -115,7 +104,6 @@ class BinanceAPI():
         back_testing_balance: float = None,
     ):
 
-        
         self.back_testing = back_testing
 
         if real_money_trading:
@@ -127,19 +115,16 @@ class BinanceAPI():
 
         # set up asset lists
         self._build_asset_list()
-        
-        # self.asset_list_by_id = self._structure_asset_dict_by_id(assets)
-        #self.asset_list_by_symbol = self._structure_asset_dict_by_symbol(self.assets)
 
-        #self.supported_crypto_symbols_bin = self._get_crypto_symbols()
-        #self._create_yf_to_alpaca_symbol_mapping(self.supported_crypto_symbols_bin)
-        #self.supported_crypto_symbols_yf = self._get_crypto_symbols_yf()
+        # self.asset_list_by_id = self._structure_asset_dict_by_id(assets)
+        # self.asset_list_by_symbol = self._structure_asset_dict_by_symbol(self.assets)
+
+        # self.supported_crypto_symbols_bin = self._get_crypto_symbols()
+        # self._create_yf_to_alpaca_symbol_mapping(self.supported_crypto_symbols_bin)
+        # self.supported_crypto_symbols_yf = self._get_crypto_symbols_yf()
 
     def _build_asset_list(self):
         prices = self.api.get_all_tickers()
-
-
-
 
 
 if __name__ == "__main__":
