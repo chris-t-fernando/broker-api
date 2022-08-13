@@ -30,9 +30,9 @@ STOP_LIMIT_BUY = 5
 STOP_LIMIT_SELL = 6
 
 ORDER_STATUS_SUMMARY_TO_ID = {
-    "cancelled": {2, 7, 8, 9, 10},
+    "cancelled": {2, 6, 7, 8, 9, 10},
     "open": {1, 3, 5},
-    "pending": {6},
+    "pending": {5},
     "filled": {4},
 }
 ORDER_STATUS_ID_TO_SUMMARY = {
@@ -40,8 +40,8 @@ ORDER_STATUS_ID_TO_SUMMARY = {
     2: "cancelled",
     3: "open",
     4: "filled",
-    5: "open",
-    6: "pending",
+    5: "pending",
+    6: "cancelled",
     7: "cancelled",
     8: "cancelled",
     9: "cancelled",
@@ -90,9 +90,7 @@ class OrderResult(IOrderResult):
         if self.order_type == LIMIT_BUY or self.order_type == LIMIT_SELL:
             self.ordered_unit_quantity = float(response["quantity"])
             self.ordered_unit_price = float(response["limit_price"])
-            self.ordered_total_value = (
-                self.ordered_unit_quantity * self.ordered_unit_price
-            )
+            self.ordered_total_value = self.ordered_unit_quantity * self.ordered_unit_price
 
         else:
             # market orders - so there is only quantity is known, not price or total value
@@ -125,6 +123,7 @@ class OrderResult(IOrderResult):
 
         self.validate()
 
+
 # concrete implementation of trade api for alpaca
 class BackTestAPI(ITradeAPI):
     def __init__(
@@ -132,6 +131,8 @@ class BackTestAPI(ITradeAPI):
         real_money_trading=False,
         back_testing: bool = False,
         back_testing_balance: float = 100000,
+        sell_metric: str = "Low",
+        buy_metric: str = "High",
     ):
         # set up asset lists
         self.assets = {
@@ -142,7 +143,6 @@ class BackTestAPI(ITradeAPI):
             "AAPL": None,
             "BHP": None,
         }
-        self.back_testing = back_testing
         self._balance = back_testing_balance
 
         self.asset_list_by_symbol = self.assets
@@ -153,9 +153,18 @@ class BackTestAPI(ITradeAPI):
         self._assets_held = {}
         self._orders = {}
         self._inactive_orders = []
-        self._bars = {}
+        self._symbols = {}
+        self._period = None
 
-    def set_period(self, period:Timestamp):
+        self.sell_metric = sell_metric
+        self.buy_metric = buy_metric
+
+    @property
+    def period(self):
+        return self._period
+
+    @period.setter
+    def period(self, period: Timestamp):
         self._period = period
 
     def get_broker_name(self):
@@ -192,9 +201,7 @@ class BackTestAPI(ITradeAPI):
 
     # not implemented
     def _structure_asset_dict_by_id(self, asset_dict):
-        raise NotImplementedError(
-            "Back Trade API does not order assets with a int key"
-        )
+        raise NotImplementedError("Back Trade API does not order assets with a int key")
 
     def get_account(self) -> Account:
         account = Account({"USD": self._balance})
@@ -231,7 +238,6 @@ class BackTestAPI(ITradeAPI):
         symbol: str,
         units: float,
         unit_price: float,
-        back_testing_date: Timestamp,
     ):
         order_id = "buy-" + BackTestAPI.generate_id()
         response = {
@@ -246,20 +252,18 @@ class BackTestAPI(ITradeAPI):
             "status": 1,
             "fees": 0,
             "feeAmount": 0,
-            "created_time": back_testing_date,
-            "updated_time": back_testing_date,
+            "created_time": self.period,
+            "updated_time": self.period,
         }
 
         self._save_order(response=response)
 
         # get the order status so it can be returned
-        order_result = self.get_order(
-            order_id=order_id, back_testing_date=back_testing_date
-        )
+        order_result = self.get_order(order_id=order_id)
 
         return order_result
 
-    def buy_order_market(self, symbol: str, units: float, back_testing_date: Timestamp):
+    def buy_order_market(self, symbol: str, units: float):
         order_id = "buy-" + BackTestAPI.generate_id()
         response = {
             "order_type": MARKET_BUY,
@@ -272,16 +276,14 @@ class BackTestAPI(ITradeAPI):
             "status": 1,
             "fees": 0,
             "feeAmount": 0,
-            "created_time": back_testing_date,
-            "updated_time": back_testing_date,
+            "created_time": self.period,
+            "updated_time": self.period,
         }
 
         self._save_order(response=response)
 
         # get the order status so it can be returned
-        order_result = self.get_order(
-            order_id=order_id, back_testing_date=back_testing_date
-        )
+        order_result = self.get_order(order_id=order_id)
 
         return order_result
 
@@ -290,7 +292,6 @@ class BackTestAPI(ITradeAPI):
         symbol: str,
         units: float,
         unit_price: float,
-        back_testing_date: Timestamp,
     ):
         order_id = "sell-" + BackTestAPI.generate_id()
         response = {
@@ -305,21 +306,17 @@ class BackTestAPI(ITradeAPI):
             "status": 1,
             "fees": 0,
             "feeAmount": 0,
-            "created_time": back_testing_date,
-            "updated_time": back_testing_date,
+            "created_time": self.period,
+            "updated_time": self.period,
         }
 
         self._save_order(response=response)
 
-        order_result = self.get_order(
-            order_id=order_id, back_testing_date=back_testing_date
-        )
+        order_result = self.get_order(order_id=order_id)
 
         return order_result
 
-    def sell_order_market(
-        self, symbol: str, units: float, back_testing_date: Timestamp
-    ):
+    def sell_order_market(self, symbol: str, units: float):
 
         order_id = "sell-" + BackTestAPI.generate_id()
         response = {
@@ -330,27 +327,24 @@ class BackTestAPI(ITradeAPI):
             "symbol": symbol,
             "quantity": units,
             "quantity_asset": self.default_currency,
+            "created_time": self.period,
+            "updated_time": self.period,
             "status": 1,
             "fees": 0,
             "feeAmount": 0,
-            "created_time": back_testing_date,
-            "updated_time": back_testing_date,
         }
 
         self._save_order(response=response)
 
-        order_result = self.get_order(
-            order_id=order_id, back_testing_date=back_testing_date
-        )
+        order_result = self.get_order(order_id=order_id)
 
         return order_result
 
-    def close_position(self, symbol: str, back_testing_date: Timestamp):
+    def close_position(self, symbol: str):
         held_position = self.get_position(symbol)
         return self.sell_order_market(
             symbol=symbol,
             units=held_position.quantity,
-            back_testing_date=back_testing_date,
         )
 
     def list_orders(self, symbol: str = None, symbols: list = None, after: str = None):
@@ -358,9 +352,7 @@ class BackTestAPI(ITradeAPI):
             raise ValueError("Can't specify both 'symbol' and 'symbols' - choose one")
 
         if after:
-            raise NotImplementedError(
-                f"Parameter 'after' is not implemented in back_test_wrapper"
-            )
+            raise NotImplementedError(f"Parameter 'after' is not implemented in back_test_wrapper")
 
         return_orders = []
         for ordered_symbol in self._orders:
@@ -382,9 +374,9 @@ class BackTestAPI(ITradeAPI):
 
         return return_orders
 
-    def get_order(self, order_id: str, back_testing_date: Timestamp):
+    def get_order(self, order_id: str):
         # refresh order status first
-        self._update_order_status(back_testing_date=back_testing_date)
+        self._update_order_status()
 
         all_orders = self.list_orders()
         for order in all_orders:
@@ -394,50 +386,42 @@ class BackTestAPI(ITradeAPI):
         return False
 
     def _save_order(self, response):
-        if self._orders.get(response["symbol"]):
-            raise ValueError(
-                f'{response["symbol"]}: Already have an order open for this symbol'
-            )
-        self._orders[response["symbol"]] = OrderResult(response=response)
+        # if self._orders.get(response["symbol"]):
+        #    raise ValueError(
+        #        f'{response["symbol"]}: Already have an order open for this symbol'
+        #    )
+        self._orders[response["orderUuid"]] = OrderResult(response=response)
 
-    def cancel_order(self, order_id, back_testing_date):
-        symbol_to_delete = None
-        for symbol in self._orders:
-            if self._orders[symbol].order_id == order_id:
+    def cancel_order(self, order_id):
+        order_to_delete = None
+        for _order_id in self._orders:
+            if self._orders[_order_id].order_id == order_id:
                 if (
-                    self._orders[symbol].status
-                    in ORDER_STATUS_SUMMARY_TO_ID["cancelled"]
-                    or self._orders[symbol].status
-                    in ORDER_STATUS_SUMMARY_TO_ID["filled"]
+                    self._orders[_order_id].status in ORDER_STATUS_SUMMARY_TO_ID["cancelled"]
+                    or self._orders[_order_id].status in ORDER_STATUS_SUMMARY_TO_ID["filled"]
                 ):
                     log.debug(
-                        f"{symbol_to_delete}: Unable to delete order_id {order_id} from "
-                        f"self._orders list since its already in {self._orders[symbol].status_summary} state"
+                        f"{order_to_delete}: Unable to delete order_id {order_id} from "
+                        f"self._orders list since its already in {self._orders[_order_id].status_summary} state"
                     )
                     return False
-                symbol_to_delete = symbol
+                order_to_delete = _order_id
 
-        if symbol_to_delete:
+        if order_to_delete:
             # need to update the order to cancelled
-            self._orders[symbol_to_delete].status = 6
-            self._orders[symbol_to_delete].status_summary = ORDER_STATUS_ID_TO_SUMMARY[
-                6
-            ]
-            self._orders[symbol_to_delete].status_text = ORDER_STATUS_TEXT[6]
-            self._orders[symbol_to_delete].success = False
-            self._orders[symbol_to_delete].update_time = back_testing_date
+            self._orders[order_to_delete].status = 6
+            self._orders[order_to_delete].closed = True
+            self._orders[order_to_delete].status_summary = ORDER_STATUS_ID_TO_SUMMARY[6]
+            self._orders[order_to_delete].status_text = ORDER_STATUS_TEXT[6]
+            self._orders[order_to_delete].success = False
+            self._orders[order_to_delete].update_time = self.period
 
             # need to move the order to self._inactive_orders
-            self._inactive_orders.append(self._orders[symbol_to_delete])
-            del self._orders[symbol_to_delete]
+            self._inactive_orders.append(self._orders[order_to_delete])
+            del self._orders[order_to_delete]
 
-            log.debug(
-                f"{symbol_to_delete}: Moved order_id {order_id} from self._orders to"
-                f"self._inactive_orders"
-            )
-            return self.get_order(
-                order_id=order_id, back_testing_date=back_testing_date
-            )
+            log.debug(f"{order_to_delete}: Moved from self._orders to self._inactive_orders")
+            return self.get_order(order_id=order_id)
         else:
             log.warning(
                 f"Tried to remove order_id {order_id} from self._orders but did not "
@@ -445,7 +429,7 @@ class BackTestAPI(ITradeAPI):
             )
             return False
 
-    def _put_ohlc(self, symbol):
+    def _put_symbol(self, symbol):
         self._symbols[symbol.yf_symbol] = symbol
 
     def _put_bars(self, symbol, bars):
@@ -455,6 +439,7 @@ class BackTestAPI(ITradeAPI):
     def _get_held_units(self, symbol):
         unit_count = 0
         paid = 0
+
         if not self._assets_held.get(symbol):
             return 0, 0
 
@@ -471,45 +456,45 @@ class BackTestAPI(ITradeAPI):
 
         # hacky way of avoiding deleting orders and raising RuntimeError for dict changed size during iteration
         orders_copy = self._orders.copy()
-        for symbol in orders_copy:
-            this_order = self._orders[symbol]
+        for _order_id in orders_copy:
+            this_order = orders_copy[_order_id]
+            this_symbol = this_order.symbol
             # if the order is cancelled or filled ie. already actioned
             if (
                 this_order.status in ORDER_STATUS_SUMMARY_TO_ID["cancelled"]
                 or this_order.status in ORDER_STATUS_SUMMARY_TO_ID["filled"]
             ):
                 self._inactive_orders.append(this_order)
-                filled_symbols.append(symbol)
+                filled_symbols.append(_order_id)
                 log.debug(
-                    f"{symbol}: Skipping this symbol in _inactive_orders since the "
+                    f"{_order_id}: Skipping this symbol in _inactive_orders since the "
                     f"status is {ORDER_STATUS_ID_TO_SUMMARY[this_order.status]}"
                 )
                 continue
 
             try:
-                check_index = self._bars[symbol].loc[self._period]
+                # check_index = self._bars[_order_id].loc[self._period]
+                check_index = self._symbols[this_symbol].ohlc.bars.loc[self._period]
             except KeyError as e:
-                log.debug(f"{symbol}: No data for {self._period}")
+                log.debug(f"{_order_id}: No {this_symbol} data for {self._period}")
                 continue
 
             # if we got here, the order is not yet actioned
             if this_order.order_type == MARKET_BUY:
                 # immediate fill - its just a question of how many units they bought
-                log.debug(
-                    f"{symbol}: Starting fill for MARKET_BUY order {this_order.order_id}"
+                log.debug(f"{_order_id}: Starting fill for MARKET_BUY order for {this_symbol}")
+
+                unit_price = self._symbols[this_symbol].align_price(
+                    self._symbols[this_symbol].ohlc.bars[self.buy_metric].loc[self._period]
                 )
 
-                unit_price = round(
-                    self._bars[symbol].Low.loc[self._period],
-                    self.get_precision(yf_symbol=symbol),
-                )
                 units_purchased = this_order.ordered_unit_quantity
                 order_value = unit_price * units_purchased
 
                 # don't process this order if it would send balance to negative
                 if order_value > self._balance:
                     log.warning(
-                        f"{symbol}: Unable to fill {this_order.order_id} - order value "
+                        f"{_order_id}: Unable to fill {this_order.order_id} - order value "
                         f"is {order_value} but balance is only {self._balance}"
                     )
                     self.cancel_order(order_id=this_order.order_id)
@@ -517,10 +502,9 @@ class BackTestAPI(ITradeAPI):
 
                 # mark this order as filled
                 this_order.status = 4
+                this_order.closed = True
                 this_order.status_text = ORDER_STATUS_TEXT[this_order.status]
-                this_order.status_summary = ORDER_STATUS_ID_TO_SUMMARY[
-                    this_order.status
-                ]
+                this_order.status_summary = ORDER_STATUS_ID_TO_SUMMARY[this_order.status]
                 this_order.filled_unit_quantity = units_purchased
                 this_order.filled_unit_price = unit_price
                 this_order.filled_total_value = (
@@ -528,10 +512,10 @@ class BackTestAPI(ITradeAPI):
                 )
 
                 # instantiate this symbol in the held array - it gets populated in a couple lines
-                if self._assets_held.get(symbol) == None:
-                    self._assets_held[symbol] = []
+                if self._assets_held.get(this_symbol) == None:
+                    self._assets_held[this_symbol] = []
 
-                self._assets_held[symbol].append(
+                self._assets_held[this_symbol].append(
                     {
                         "units": this_order.filled_unit_quantity,
                         "unit_price": this_order.filled_unit_price,
@@ -545,24 +529,22 @@ class BackTestAPI(ITradeAPI):
                     15,
                 )
 
-                filled_symbols.append(symbol)
+                filled_symbols.append(_order_id)
 
                 log.debug(
-                    f"{symbol}: market_buy filled, {this_order.filled_unit_quantity} "
+                    f"{_order_id}: market_buy filled, {this_order.filled_unit_quantity} "
                     f"units at {this_order.filled_unit_price}, balance {self._balance}"
                 )
 
             elif this_order.order_type == MARKET_SELL:
-                log.debug(
-                    f"{symbol}: Starting fill for MARKET_SELL order {this_order.order_id}"
-                )
+                log.debug(f"{_order_id}: Starting fill for MARKET_SELL order {this_order.order_id}")
 
                 # how many of this symbol do we own? is it >= than the requested amount to sell?
-                held, paid = self._get_held_units(symbol)
+                held, paid = self._get_held_units(this_symbol)
 
                 if held < this_order.ordered_unit_quantity:
                     log.warning(
-                        f"{symbol}: Failed to fill order {this_order.order_id} - trying to "
+                        f"{_order_id}: Failed to fill order {this_order.order_id} - trying to "
                         f"sell {this_order.ordered_unit_quantity} units but only hold {held}"
                     )
                     self.cancel_order(order_id=this_order.order_id)
@@ -571,83 +553,71 @@ class BackTestAPI(ITradeAPI):
                     #    f"{symbol}: Hold {held} so can't sell {this_order.ordered_unit_quantity} units"
                     # )
 
-                unit_price = round(
-                    self._bars[symbol].High.loc[self._period],
-                    self.get_precision(yf_symbol=symbol),
+                unit_price = self._symbols[this_symbol].align_price(
+                    self._symbols[this_symbol].ohlc.bars[self.sell_metric].loc[self._period]
                 )
 
                 # mark this order as filled
                 this_order.status = 4
+                this_order.closed = True
                 this_order.status_text = ORDER_STATUS_TEXT[this_order.status]
-                this_order.status_summary = ORDER_STATUS_ID_TO_SUMMARY[
-                    this_order.status
-                ]
+                this_order.status_summary = ORDER_STATUS_ID_TO_SUMMARY[this_order.status]
                 this_order.filled_unit_quantity = this_order.ordered_unit_quantity
                 this_order.filled_unit_price = unit_price
                 this_order.filled_total_value = (
                     this_order.filled_unit_quantity * this_order.filled_unit_price
                 )
 
-                self._do_sell(
-                    quantity_to_sell=this_order.filled_unit_quantity, symbol=symbol
-                )
+                self._do_sell(quantity_to_sell=this_order.filled_unit_quantity, symbol=_order_id)
 
                 # update balance
-                self._balance = round(
-                    self._balance + round(this_order.filled_total_value, 2), 15
-                )
+                self._balance = round(self._balance + round(this_order.filled_total_value, 2), 15)
 
-                filled_symbols.append(symbol)
+                filled_symbols.append(_order_id)
 
                 log.info(
-                    f"{symbol}: market_sell filled, {this_order.filled_unit_quantity} "
+                    f"{_order_id}: market_sell filled, {this_order.filled_unit_quantity} "
                     f"units at {this_order.filled_unit_price}, balance {self._balance}"
                 )
 
             elif this_order.order_type == LIMIT_BUY:
-                if (
-                    self._bars[symbol].Low.loc[self._period]
-                    < this_order.ordered_unit_price
-                ):
+                last_low = self._symbols[this_symbol].ohlc.bars[self.buy_metric].loc[self._period]
+                if last_low < this_order.ordered_unit_price:
                     log.debug(
-                        f"{symbol}: Starting fill for LIMIT_BUY order {this_order.order_id}"
+                        f"{_order_id}: Starting fill for LIMIT_BUY order {this_order.order_id}"
                     )
 
                     # don't process this order if it would send balance to negative
-                    order_value = (
-                        this_order.ordered_unit_quantity * this_order.ordered_unit_price
-                    )
+                    order_value = this_order.ordered_unit_quantity * this_order.ordered_unit_price
                     if order_value > self._balance:
                         log.warning(
-                            f"{symbol}: Unable to fill {this_order.order_id} - order "
+                            f"{_order_id}: Unable to fill {this_order.order_id} - order "
                             f"value is {order_value} but balance is only {self._balance}"
                         )
                         self.cancel_order(
                             order_id=this_order.order_id,
-                            back_testing_date=self._period,
                         )
                         continue
 
                     # mark this order as filled
                     this_order.status = 4
+                    this_order.closed = True
                     this_order.status_text = ORDER_STATUS_TEXT[this_order.status]
-                    this_order.status_summary = ORDER_STATUS_ID_TO_SUMMARY[
-                        this_order.status
-                    ]
+                    this_order.status_summary = ORDER_STATUS_ID_TO_SUMMARY[this_order.status]
                     this_order.filled_unit_quantity = this_order.ordered_unit_quantity
-                    this_order.filled_unit_price = round(
-                        this_order.ordered_unit_price,
-                        self.get_precision(yf_symbol=symbol),
+                    this_order.filled_unit_price = self._symbols[this_symbol].align_price(
+                        this_order.ordered_unit_price
                     )
+
                     this_order.filled_total_value = (
                         this_order.filled_unit_quantity * this_order.filled_unit_price
                     )
 
                     # instantiate this symbol in the held array - it gets populated in a couple lines
-                    if self._assets_held.get(symbol) == None:
-                        self._assets_held[symbol] = []
+                    if self._assets_held.get(this_symbol) == None:
+                        self._assets_held[this_symbol] = []
 
-                    self._assets_held[symbol].append(
+                    self._assets_held[this_symbol].append(
                         {
                             "units": this_order.filled_unit_quantity,
                             "unit_price": this_order.filled_unit_price,
@@ -657,40 +627,34 @@ class BackTestAPI(ITradeAPI):
                     # update balance
                     self._balance = round(
                         self._balance
-                        - (
-                            this_order.filled_unit_price
-                            * this_order.filled_unit_quantity
-                        ),
+                        - (this_order.filled_unit_price * this_order.filled_unit_quantity),
                         15,
                     )
 
-                    filled_symbols.append(symbol)
+                    filled_symbols.append(_order_id)
 
                     log.info(
-                        f"{symbol}: limit_buy filled, {this_order.filled_unit_quantity} "
+                        f"{_order_id}: limit_buy filled, {this_order.filled_unit_quantity} "
                         f"units at {this_order.filled_unit_price}, balance {self._balance}"
                     )
 
             elif this_order.order_type == LIMIT_SELL:
-                if (
-                    self._bars[symbol].High.loc[self._period]
-                    > this_order.ordered_unit_price
-                ):
+                last_high = self._symbols[this_symbol].ohlc.bars[self.sell_metric].loc[self._period]
+                if last_high > this_order.ordered_unit_price:
                     log.debug(
-                        f"{symbol}: Starting fill for LIMIT_SELL order {this_order.order_id}"
+                        f"{_order_id}: Starting fill for LIMIT_SELL order {this_order.order_id}"
                     )
                     # how many of this symbol do we own? is it >= than the requested amount to sell?
-                    held, paid = self._get_held_units(symbol)
+                    held, paid = self._get_held_units(this_symbol)
 
                     if held < this_order.ordered_unit_quantity:
                         log.debug(
-                            f"{symbol}: Failed to fill order {this_order.order_id} - "
+                            f"{_order_id}: Failed to fill order {this_order.order_id} - "
                             f"trying to sell {this_order.ordered_unit_quantity} units "
                             f"but only hold {held}"
                         )
                         self.cancel_order(
                             order_id=this_order.order_id,
-                            back_testing_date=self._period,
                         )
                         continue
                         # raise ValueError(
@@ -699,38 +663,36 @@ class BackTestAPI(ITradeAPI):
 
                     # mark this order as filled
                     this_order.status = 4
+                    this_order.closed = True
                     this_order.status_text = ORDER_STATUS_TEXT[this_order.status]
-                    this_order.status_summary = ORDER_STATUS_ID_TO_SUMMARY[
-                        this_order.status
-                    ]
+                    this_order.status_summary = ORDER_STATUS_ID_TO_SUMMARY[this_order.status]
                     this_order.filled_unit_quantity = this_order.ordered_unit_quantity
-                    this_order.filled_unit_price = round(
-                        self._bars[symbol].High.loc[self._period],
-                        self.get_precision(yf_symbol=symbol),
+                    this_order.filled_unit_price = self._symbols[this_symbol].align_price(
+                        self._symbols[this_symbol].ohlc.bars[self.sell_metric].loc[self._period]
                     )
+
                     this_order.filled_total_value = (
                         this_order.filled_unit_quantity * this_order.filled_unit_price
                     )
 
                     self._do_sell(
-                        quantity_to_sell=this_order.filled_unit_quantity, symbol=symbol
+                        quantity_to_sell=this_order.filled_unit_quantity, symbol=_order_id
                     )
 
                     # update balance
-                    self._balance = round(
-                        self._balance + this_order.filled_total_value, 15
-                    )
+                    self._balance = round(self._balance + this_order.filled_total_value, 15)
 
-                    filled_symbols.append(symbol)
+                    filled_symbols.append(_order_id)
 
                     log.info(
-                        f"{symbol}: limit_sell filled, {this_order.filled_unit_quantity} "
+                        f"{_order_id}: limit_sell filled, {this_order.filled_unit_quantity} "
                         f"units at {this_order.filled_unit_price}, balance {self._balance}"
                     )
 
-        for symbol in filled_symbols:
-            self._inactive_orders.append(self._orders[symbol])
-            del self._orders[symbol]
+        for _order_id in filled_symbols:
+            self._inactive_orders.append(orders_copy[_order_id])
+            if _order_id in self._orders:
+                del self._orders[_order_id]
 
     def _do_sell(self, quantity_to_sell, symbol):
         # if we don't hold any, return False
@@ -901,9 +863,9 @@ class BackTestAPI(ITradeAPI):
             min_price_increment=min_price_increment,
         )
 
-    def validate_symbol(self, symbol:str):
+    def validate_symbol(self, symbol: str):
         # TODO: this is not right - but the whole handling of symbols is busted in back testing
         return True
 
     def generate_id(length: int = 6):
-        return uuid.uuid4().hex[:length].upper()\
+        return uuid.uuid4().hex[:length].upper()
