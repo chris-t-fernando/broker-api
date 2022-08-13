@@ -8,8 +8,7 @@ from .ibroker_api import (
 )
 from pandas import Timestamp
 import logging
-import pytz
-import utils
+import uuid
 
 # import datetime
 # from dateutil.relativedelta import relativedelta
@@ -156,6 +155,9 @@ class BackTestAPI(ITradeAPI):
         self._inactive_orders = []
         self._bars = {}
 
+    def set_period(self, period:Timestamp):
+        self._period = period
+
     def get_broker_name(self):
         return "back_test"
 
@@ -206,6 +208,7 @@ class BackTestAPI(ITradeAPI):
 
     def list_positions(self):
         # {symbol: , quantity}
+        self._update_order_status()
         positions = []
 
         for symbol in self._assets_held:
@@ -230,7 +233,7 @@ class BackTestAPI(ITradeAPI):
         unit_price: float,
         back_testing_date: Timestamp,
     ):
-        order_id = "buy-" + utils.generate_id()
+        order_id = "buy-" + BackTestAPI.generate_id()
         response = {
             "order_type": LIMIT_BUY,
             "orderUuid": order_id,
@@ -257,7 +260,7 @@ class BackTestAPI(ITradeAPI):
         return order_result
 
     def buy_order_market(self, symbol: str, units: float, back_testing_date: Timestamp):
-        order_id = "buy-" + utils.generate_id()
+        order_id = "buy-" + BackTestAPI.generate_id()
         response = {
             "order_type": MARKET_BUY,
             "orderUuid": order_id,
@@ -289,7 +292,7 @@ class BackTestAPI(ITradeAPI):
         unit_price: float,
         back_testing_date: Timestamp,
     ):
-        order_id = "sell-" + utils.generate_id()
+        order_id = "sell-" + BackTestAPI.generate_id()
         response = {
             "order_type": LIMIT_SELL,
             "orderUuid": order_id,
@@ -318,7 +321,7 @@ class BackTestAPI(ITradeAPI):
         self, symbol: str, units: float, back_testing_date: Timestamp
     ):
 
-        order_id = "sell-" + utils.generate_id()
+        order_id = "sell-" + BackTestAPI.generate_id()
         response = {
             "order_type": MARKET_SELL,
             "orderUuid": order_id,
@@ -442,7 +445,11 @@ class BackTestAPI(ITradeAPI):
             )
             return False
 
+    def _put_ohlc(self, symbol):
+        self._symbols[symbol.yf_symbol] = symbol
+
     def _put_bars(self, symbol, bars):
+        raise RuntimeError
         self._bars[symbol] = bars
 
     def _get_held_units(self, symbol):
@@ -457,7 +464,7 @@ class BackTestAPI(ITradeAPI):
 
         return unit_count, paid
 
-    def _update_order_status(self, back_testing_date):
+    def _update_order_status(self):
         # loop through all the orders looking for whether they've been filled
         # assumes that this gets called with back_testing_date for every index in bars, since it only checks this index/back_testing_date
         filled_symbols = []
@@ -480,9 +487,9 @@ class BackTestAPI(ITradeAPI):
                 continue
 
             try:
-                check_index = self._bars[symbol].loc[back_testing_date]
+                check_index = self._bars[symbol].loc[self._period]
             except KeyError as e:
-                log.debug(f"{symbol}: No data for {back_testing_date}")
+                log.debug(f"{symbol}: No data for {self._period}")
                 continue
 
             # if we got here, the order is not yet actioned
@@ -493,7 +500,7 @@ class BackTestAPI(ITradeAPI):
                 )
 
                 unit_price = round(
-                    self._bars[symbol].Low.loc[back_testing_date],
+                    self._bars[symbol].Low.loc[self._period],
                     self.get_precision(yf_symbol=symbol),
                 )
                 units_purchased = this_order.ordered_unit_quantity
@@ -565,7 +572,7 @@ class BackTestAPI(ITradeAPI):
                     # )
 
                 unit_price = round(
-                    self._bars[symbol].High.loc[back_testing_date],
+                    self._bars[symbol].High.loc[self._period],
                     self.get_precision(yf_symbol=symbol),
                 )
 
@@ -599,7 +606,7 @@ class BackTestAPI(ITradeAPI):
 
             elif this_order.order_type == LIMIT_BUY:
                 if (
-                    self._bars[symbol].Low.loc[back_testing_date]
+                    self._bars[symbol].Low.loc[self._period]
                     < this_order.ordered_unit_price
                 ):
                     log.debug(
@@ -617,7 +624,7 @@ class BackTestAPI(ITradeAPI):
                         )
                         self.cancel_order(
                             order_id=this_order.order_id,
-                            back_testing_date=back_testing_date,
+                            back_testing_date=self._period,
                         )
                         continue
 
@@ -666,7 +673,7 @@ class BackTestAPI(ITradeAPI):
 
             elif this_order.order_type == LIMIT_SELL:
                 if (
-                    self._bars[symbol].High.loc[back_testing_date]
+                    self._bars[symbol].High.loc[self._period]
                     > this_order.ordered_unit_price
                 ):
                     log.debug(
@@ -683,7 +690,7 @@ class BackTestAPI(ITradeAPI):
                         )
                         self.cancel_order(
                             order_id=this_order.order_id,
-                            back_testing_date=back_testing_date,
+                            back_testing_date=self._period,
                         )
                         continue
                         # raise ValueError(
@@ -698,7 +705,7 @@ class BackTestAPI(ITradeAPI):
                     ]
                     this_order.filled_unit_quantity = this_order.ordered_unit_quantity
                     this_order.filled_unit_price = round(
-                        self._bars[symbol].High.loc[back_testing_date],
+                        self._bars[symbol].High.loc[self._period],
                         self.get_precision(yf_symbol=symbol),
                     )
                     this_order.filled_total_value = (
@@ -898,54 +905,5 @@ class BackTestAPI(ITradeAPI):
         # TODO: this is not right - but the whole handling of symbols is busted in back testing
         return True
 
-
-if __name__ == "__main__":
-    starting_balance = 10000
-    api = BackTestAPI(back_testing=True, back_testing_balance=starting_balance)
-
-    import pandas as pd
-
-    import utils
-
-    f_file = "bots/tests/fixtures/order_buy_active.txt"
-    f = open(f_file, "r")
-    order_file = f.read()
-    unpickled_order = utils.unpickle(order_file)
-
-    data = pd.read_csv(
-        f"bots/tests/fixtures/symbol_chris.csv",
-        index_col=0,
-        parse_dates=True,
-        infer_datetime_format=True,
-    )
-
-    api._put_bars("CHRIS", data)
-    back_testing_date = Timestamp("2022-05-09 14:50:00").tz_localize(pytz.utc)
-
-    api.get_account()
-    api.list_positions()
-
-    api.buy_order_market(symbol="CHRIS", units=10, back_testing_date=back_testing_date)
-    api.sell_order_market(symbol="CHRIS", units=4, back_testing_date=back_testing_date)
-    api.sell_order_limit(
-        symbol="CHRIS", units=3, unit_price=20, back_testing_date=back_testing_date
-    )
-    # api.buy_order_limit(
-    #    symbol="CHRIS", units=3, unit_price=150, back_testing_date=back_testing_date
-    # )
-    # api.buy_order_limit(
-    #    symbol="CHRIS", units=4, unit_price=150, back_testing_date=back_testing_date
-    # )
-    # api.buy_order_limit(
-    #    symbol="CHRIS", units=3, unit_price=150, back_testing_date=back_testing_date
-    # )
-    # api.sell_order_limit(
-    #    symbol="CHRIS", units=3.5, unit_price=151, back_testing_date=back_testing_date
-    # )
-    # api.sell_order_limit(
-    #    symbol="CHRIS", units=6.5, unit_price=151, back_testing_date=back_testing_date
-    # )
-
-    print(f"Profit: {round(api._balance - starting_balance,2)}")
-    api.list_orders()
-    print("banana")
+    def generate_id(length: int = 6):
+        return uuid.uuid4().hex[:length].upper()\
