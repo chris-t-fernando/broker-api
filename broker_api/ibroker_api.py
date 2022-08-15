@@ -10,19 +10,49 @@ STOP_LIMIT_BUY = 5
 STOP_LIMIT_SELL = 6
 DUST_SELL = 8
 
+
 class NotImplementedError(Exception):
     ...
 
-class BrokerAPIError(Exception):...
-class UnknownSymbolError(Exception):...
-class DelistedAssetError(Exception):...
-class UntradeableAssetError(Exception):...  
-class MalformedOrderResult(Exception):...  
-class ZeroUnitsOrderedError(Exception):...
-class ApiRateLimitError(Exception):...
-class MinimumOrderError(Exception):...
-class BuyImmediatelyTriggeredError(Exception):...
-#class BrokerAPIError(Exception):...
+
+class BrokerAPIError(Exception):
+    ...
+
+
+class UnknownSymbolError(Exception):
+    ...
+
+
+class DelistedAssetError(Exception):
+    ...
+
+
+class UntradeableAssetError(Exception):
+    ...
+
+
+class MalformedOrderResult(Exception):
+    ...
+
+
+class ZeroUnitsOrderedError(Exception):
+    ...
+
+
+class ApiRateLimitError(Exception):
+    ...
+
+
+class MinimumOrderError(Exception):
+    ...
+
+
+class BuyImmediatelyTriggeredError(Exception):
+    ...
+
+
+# class BrokerAPIError(Exception):...
+
 
 class Account:
     assets: dict
@@ -41,9 +71,7 @@ class Position:
 
 
 class Asset:
-    def __init__(
-        self, symbol, min_quantity, min_quantity_increment, min_price_increment
-    ):
+    def __init__(self, symbol, min_quantity, min_quantity_increment, min_price_increment):
         self.symbol = symbol
         self.min_quantity = min_quantity
         self.min_quantity_increment = min_quantity_increment
@@ -51,52 +79,54 @@ class Asset:
 
 
 class IOrderResult(ABC):
-    _raw_response:dict
-    order_type:int
-    order_type_text:str
-    order_id:str
-    symbol:str
-    ordered_unit_quantity:float
-    ordered_unit_price:float
-    ordered_total_value:float
-    filled_unit_quantity:float
-    filled_unit_price:float
-    filled_total_value:float
-    status:int
-    status_text:str
-    status_summary:str
-    success:bool
-    fees:float
-    create_time:datetime
-    update_time:datetime
-    closed:bool
-        
+    _raw_response: dict
+    order_type: int
+    order_type_text: str
+    order_id: str
+    symbol: str
+    ordered_unit_quantity: float
+    ordered_unit_price: float
+    ordered_total_value: float
+    filled_unit_quantity: float
+    filled_unit_price: float
+    filled_total_value: float
+    status: int
+    status_text: str
+    status_summary: str
+    success: bool
+    fees: float
+    create_time: datetime
+    update_time: datetime
+    closed: bool
+
     @abstractmethod
     def __init__(self, response: dict, orders_create_object):
         ...
 
     def validate(self):
         failed = False
-        required_attributes = ["_raw_response",
-    "status",
-    "status_text",
-    "status_summary",
-    "success",
-    "order_type",
-    "order_type_text",
-    "order_id",
-    "symbol",
-    "ordered_unit_quantity",
-    "ordered_unit_price",
-    "ordered_total_value",
-    "filled_unit_quantity",
-    "filled_unit_price",
-    "filled_total_value",
-    "fees",
-    "create_time",
-    "update_time",
-    "closed"]
-        
+        required_attributes = [
+            "_raw_response",
+            "status",
+            "status_text",
+            "status_summary",
+            "success",
+            "order_type",
+            "order_type_text",
+            "order_id",
+            "symbol",
+            "ordered_unit_quantity",
+            "ordered_unit_price",
+            "ordered_total_value",
+            "filled_unit_quantity",
+            "filled_unit_price",
+            "filled_total_value",
+            "fees",
+            "create_time",
+            "update_time",
+            "closed",
+        ]
+
         for attribute in required_attributes:
             if not hasattr(self, attribute):
                 raise MalformedOrderResult(f"OrderResult is missing {attribute}")
@@ -108,7 +138,6 @@ class IOrderResult(ABC):
             "order_id": self.order_id,
             "order_type": self.order_type,
             "order_type_text": self.order_type_text,
-            "play_id": self.play_id,
             "status": self.status,
             "status_summary": self.status_summary,
             "status_text": self.status_text,
@@ -144,15 +173,17 @@ class ITradeAPI(ABC):
         ...
 
     @abstractmethod
-    def get_bars(self,symbol: str, start: str, end: str = None, interval: str = "1d") -> DataFrame:
+    def get_bars(self, symbol: str, start: str, end: str = None, interval: str = "1d") -> DataFrame:
         ...
 
     @abstractmethod
-    def buy_order_market(self, symbol:str, units:int, back_testing_date=None) -> IOrderResult:
+    def buy_order_market(self, symbol: str, units: int, back_testing_date=None) -> IOrderResult:
         ...
 
     @abstractmethod
-    def buy_order_limit(self, symbol: str, units: float, unit_price: float, back_testing_date=None) -> IOrderResult:
+    def buy_order_limit(
+        self, symbol: str, units: float, unit_price: float, back_testing_date=None
+    ) -> IOrderResult:
         ...
 
     @abstractmethod
@@ -196,4 +227,5 @@ class ITradeAPI(ABC):
         ...
 
     @abstractmethod
-    def validate_symbol(self, symbol:str)->bool:...
+    def validate_symbol(self, symbol: str) -> bool:
+        ...
