@@ -128,7 +128,8 @@ class OrderResult(IOrderResult):
 class BackTestAPI(ITradeAPI):
     def __init__(
         self,
-        real_money_trading=False,
+        time_manager,
+        real_money_trading: bool = False,
         back_testing: bool = False,
         back_testing_balance: float = 100000,
         sell_metric: str = "Low",
@@ -154,18 +155,15 @@ class BackTestAPI(ITradeAPI):
         self._orders = {}
         self._inactive_orders = []
         self._symbols = {}
-        self._period = None
 
         self.sell_metric = sell_metric
         self.buy_metric = buy_metric
 
+        self._time_manager = time_manager
+
     @property
     def period(self):
-        return self._period
-
-    @period.setter
-    def period(self, period: Timestamp):
-        self._period = period
+        return self._time_manager.now
 
     def get_broker_name(self):
         return "back_test"
@@ -474,9 +472,9 @@ class BackTestAPI(ITradeAPI):
 
             try:
                 # check_index = self._bars[_order_id].loc[self._period]
-                check_index = self._symbols[this_symbol].ohlc.bars.loc[self._period]
+                check_index = self._symbols[this_symbol].ohlc.bars.loc[self.period]
             except KeyError as e:
-                log.debug(f"{_order_id}: No {this_symbol} data for {self._period}")
+                log.debug(f"{_order_id}: No {this_symbol} data for {self.period}")
                 continue
 
             # if we got here, the order is not yet actioned
@@ -485,7 +483,7 @@ class BackTestAPI(ITradeAPI):
                 log.debug(f"{_order_id}: Starting fill for MARKET_BUY order for {this_symbol}")
 
                 unit_price = self._symbols[this_symbol].align_price(
-                    self._symbols[this_symbol].ohlc.bars[self.buy_metric].loc[self._period]
+                    self._symbols[this_symbol].ohlc.bars[self.buy_metric].loc[self.period]
                 )
 
                 units_purchased = this_order.ordered_unit_quantity
@@ -554,7 +552,7 @@ class BackTestAPI(ITradeAPI):
                     # )
 
                 unit_price = self._symbols[this_symbol].align_price(
-                    self._symbols[this_symbol].ohlc.bars[self.sell_metric].loc[self._period]
+                    self._symbols[this_symbol].ohlc.bars[self.sell_metric].loc[self.period]
                 )
 
                 # mark this order as filled
@@ -581,7 +579,7 @@ class BackTestAPI(ITradeAPI):
                 )
 
             elif this_order.order_type == LIMIT_BUY:
-                last_low = self._symbols[this_symbol].ohlc.bars[self.buy_metric].loc[self._period]
+                last_low = self._symbols[this_symbol].ohlc.bars[self.buy_metric].loc[self.period]
                 if last_low < this_order.ordered_unit_price:
                     log.debug(
                         f"{_order_id}: Starting fill for LIMIT_BUY order {this_order.order_id}"
@@ -639,7 +637,7 @@ class BackTestAPI(ITradeAPI):
                     )
 
             elif this_order.order_type == LIMIT_SELL:
-                last_high = self._symbols[this_symbol].ohlc.bars[self.sell_metric].loc[self._period]
+                last_high = self._symbols[this_symbol].ohlc.bars[self.sell_metric].loc[self.period]
                 if last_high > this_order.ordered_unit_price:
                     log.debug(
                         f"{_order_id}: Starting fill for LIMIT_SELL order {this_order.order_id}"
@@ -668,7 +666,7 @@ class BackTestAPI(ITradeAPI):
                     this_order.status_summary = ORDER_STATUS_ID_TO_SUMMARY[this_order.status]
                     this_order.filled_unit_quantity = this_order.ordered_unit_quantity
                     this_order.filled_unit_price = self._symbols[this_symbol].align_price(
-                        self._symbols[this_symbol].ohlc.bars[self.sell_metric].loc[self._period]
+                        self._symbols[this_symbol].ohlc.bars[self.sell_metric].loc[self.period]
                     )
 
                     this_order.filled_total_value = (
