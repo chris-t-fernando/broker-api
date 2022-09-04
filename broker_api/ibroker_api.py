@@ -229,3 +229,7 @@ class ITradeAPI(ABC):
     @abstractmethod
     def validate_symbol(self, symbol: str) -> bool:
         ...
+
+    @property
+    def back_testing(self):
+        return False

@@ -867,3 +867,7 @@ class BackTestAPI(ITradeAPI):
 
     def generate_id(length: int = 6):
         return uuid.uuid4().hex[:length].upper()
+
+    @property
+    def back_testing(self):
+        return True
