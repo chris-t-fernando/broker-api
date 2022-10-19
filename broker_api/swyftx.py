@@ -797,7 +797,6 @@ class SwyftxAPI(ITradeAPI):
     def generate_id(self, length: int = 6):
         return uuid.uuid4().hex[:length].upper()
 
-
     def hacky_float(self, dec: Decimal, min_price_increment) -> float:
         string_dec = str(dec)
         dot_at = string_dec.find(".") + 1

@@ -470,6 +470,9 @@ class BackTestAPI(ITradeAPI):
                 )
                 continue
 
+            if this_symbol not in self._symbols:
+                raise KeyError(f"{this_symbol} is not registered in {self}")
+
             try:
                 # check_index = self._bars[_order_id].loc[self._period]
                 check_index = self._symbols[this_symbol].ohlc.bars.loc[self.period]
