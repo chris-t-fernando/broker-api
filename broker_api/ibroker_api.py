@@ -156,6 +156,8 @@ class IOrderResult(ABC):
 
 # interface for api
 class ITradeAPI(ABC):
+    _back_testing:bool
+
     @abstractmethod
     def __init__(self, api_key: str, environment: str = "paper"):
         ...
@@ -232,4 +234,17 @@ class ITradeAPI(ABC):
 
     @property
     def back_testing(self):
-        return False
+        try:
+            return self._back_testing
+        except AttributeError:
+            raise RuntimeError(f"back_testing has not been set yet")
+
+
+    @back_testing.setter
+    def back_testing(self, back_testing_enabled):
+        try:
+            self._back_testing is not None
+            raise RuntimeError(f"Cannot change back_testing once set (already set to {self._back_testing})")
+        except AttributeError:
+            self._back_testing = back_testing_enabled
+            
