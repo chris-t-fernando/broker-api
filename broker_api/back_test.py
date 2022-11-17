@@ -10,9 +10,6 @@ from pandas import Timestamp
 import logging
 import uuid
 
-# import datetime
-# from dateutil.relativedelta import relativedelta
-
 # update fixtures to match new OrderResults spec
 # or maybe update fixtures to use raw API results and then just remember
 # that i need to pipe them through?
@@ -134,19 +131,22 @@ class BackTestAPI(ITradeAPI):
         back_testing_balance: float = 100000,
         sell_metric: str = "Low",
         buy_metric: str = "High",
+        symbol_objects:set=None
     ):
         # set up asset lists
-        self.assets = {
-            "BTC": None,
-            "SOL": None,
-            "ADA": None,
-            "SHIB": None,
-            "AAPL": None,
-            "BHP": None,
-        }
+        #self.assets = {
+        #    "BTC": None,
+        #    "SOL": None,
+        #    "ADA": None,
+        #    "SHIB": None,
+        #    "AAPL": None,
+        #    "BHP": None,
+        #}
+        
+
         self._balance = back_testing_balance
 
-        self.asset_list_by_symbol = self.assets
+        #self.asset_list_by_symbol = self.assets
         self.supported_crypto_symbols = self._get_crypto_symbols()
 
         self.default_currency = "USD"
@@ -155,6 +155,10 @@ class BackTestAPI(ITradeAPI):
         self._orders = {}
         self._inactive_orders = []
         self._symbols = {}
+
+        if symbol_objects:
+            for symbol_obj in symbol_objects:
+                self._put_symbol(symbol_obj)
 
         self.sell_metric = sell_metric
         self.buy_metric = buy_metric
